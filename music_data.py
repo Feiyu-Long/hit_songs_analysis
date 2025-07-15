@@ -11,12 +11,12 @@ def display_choice():
     # Description: display options to users
     # Parameter: None
     # Return: None
-    print("Welcome. This program allows you to access a database on hit songs in recent years.\nSelect one operation from the following:")
-    print("A. Sort DataFrame")
+    print("\nWelcome. This program allows you to access a database on hit songs in recent years.\nSelect one operation from the following:")
+    print("A. Sort Data")
     print("B. Search for object in column")
     print("C. Filter by release date")
     print("D. Filter by explicit content")
-    print("E. Predict artist future popularity")
+    print("E. Visualize and predict values of a column from an artist")
     print("F. Save current DataFrame as image")
     print("G. Reset all data operations")
     print("H. Exit program")
@@ -97,11 +97,18 @@ def object_search(df,column_num,object_name):
     # 3. object_name storing the inputted data point request by user
     # Return: filtered dataFrame
 
+    # correspond column name to df column
     col_name = df.columns[column_num]
-    df_filtered = df[df[col_name] == object_name]
+
+    # apply filter
+    df_filtered = df[df[col_name]] == object_name
+
+    # return original df when df is empty
     if df_filtered.empty:
         print("Search complete. No match found.")
         return df
+
+    # return filtered df
     return df_filtered
 
 def time_search(df,year_num=None,month_num=None,date_num=None):
@@ -113,6 +120,7 @@ def time_search(df,year_num=None,month_num=None,date_num=None):
     # 4. date_num storing an integer representing the release day, set default as None
     # Return: wrangled dataFrame
 
+    # convert to datetime variable
     df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
 
     # Apply filters if provided
@@ -123,9 +131,7 @@ def time_search(df,year_num=None,month_num=None,date_num=None):
     if date_num is not None:
         df = df[df['release_date'].dt.day == date_num]
 
-    df_filtered_2 = df.drop(columns=["song_id", "id_artists"])
     return df
-# sort df in time order
 
 def filter_explicit(df,filter_num):
     # Description: filter by explicit or non-explicit
@@ -133,42 +139,63 @@ def filter_explicit(df,filter_num):
     # 1. df storing the input dataFrame
     # 2. filter_num determining whether filter by explicit or non-explicit
     # Return: filtered dataFrame
+
+    # use branching to apply filter
     if filter_num == 0:
         df_filtered = df[df["explicit"] == False]
     else:
         df_filtered = df[df["explicit"] == True]
+
     return df_filtered
 
-def artist_popularity_prediction(df,artist_name,future_hits_num):
-    # Description: visualize datapoints of artists' hits and predict the future popularity of their hits using ML
+def artist_value_prediction(df,artist_name,column_num, future_hits_num):
+    # Description: visualize datapoints of artists' hits and predict future datapoints of the selected column of their hits using ML
     # Parameter: 3
     # 1. df storing the input dataFrame
     # 2. artist_name storing the name of the artist
-    # 3. future_hits_num storing the number of future hits required to predict
+    # 3. column_num storing the index of the input column
+    # 4. future_hits_num storing the number of future hits required to predict
     # Return: None
+
+    # ensure valid artist
     df_artist = object_search(df, 3, artist_name).copy()
     if df_artist.empty:
         print("No songs found for this artist.")
 
-    df_artist['release_date'] = pd.to_datetime(df_artist['release_date'], errors='coerce')
-    df_artist = df_artist.dropna(subset=['release_date', 'popularity'])
+    # ensure column contains numeric value
+    target_col = df_artist.columns[column_num]
+    if not pd.api.types.is_numeric_dtype(df_artist[target_col]):
+        print("The selected column "+target_col+" is not numeric.")
+        return df_artist
 
-    if len(df_artist) < 5:
+    # convert dates to datetime
+    df_artist['release_date'] = pd.to_datetime(df_artist['release_date'], errors='coerce')
+
+    # drop na values
+    df_artist = df_artist.dropna(subset=['release_date', target_col])
+
+    # ensure enough datapoints for training
+    if len(df_artist) < 3:
         print("Not enough data points to train.")
         return df_artist
 
+    # set X and y subsets
     X = np.array(df_artist['release_date'].map(lambda x: x.toordinal())).reshape(-1, 1)
-    y = df_artist['popularity'].values
+    y = df_artist[target_col].values
 
     # Fit polynomial regression
     model = make_pipeline(PolynomialFeatures(2), LinearRegression())
     model.fit(X, y)
 
+    # determine future dates
     last_date = df_artist['release_date'].max()
     future_dates = [last_date + pd.Timedelta(days=30 * i) for i in range(1, future_hits_num + 1)]
+
+    # predict based on future dates
     X_future = np.array([d.toordinal() for d in future_dates]).reshape(-1, 1)
     y_pred = model.predict(X_future)
 
+    # apply dense dates to fit the line
     dense_dates = pd.date_range(df_artist['release_date'].min(), future_dates[-1], freq='7D')
     X_dense = np.array([d.toordinal() for d in dense_dates]).reshape(-1, 1)
     y_dense_pred = model.predict(X_dense)
@@ -180,15 +207,16 @@ def artist_popularity_prediction(df,artist_name,future_hits_num):
     plt.scatter(future_dates, y_pred, color='red',label='Future Predictions')
     plt.xlabel("Release Date")
     plt.ylabel("Popularity")
-    plt.title("Popularity Prediction for "+artist_name+" (Poly Regression)")
+    plt.title(str(target_col)+" prediction for "+artist_name+" (Poly Regression)")
     plt.legend()
     plt.tight_layout()
-    plt.savefig("predicted_popularity_for_"+artist_name+".jpg", dpi=300)
+    plt.savefig("predicted_"+str(target_col)+"_for_"+artist_name+".jpg", dpi=300)
     plt.close()
 
+    # wrap predicted dates and values into new df and display info
     df_future = pd.DataFrame({
         'predicted_release_date': future_dates,
-        'predicted_popularity': y_pred
+        'predicted_'+str(target_col): y_pred
     })
     print(df_future.head())
 
@@ -223,95 +251,184 @@ def save_df_as_image(df, file_name, max_rows):
     table.auto_set_font_size(False)
     table.set_fontsize(10)
     table.scale(1.2, 1.2)
-    fig.tight_layout()
-    fig.savefig(file_name+".jpg", dpi=300)
-# descriptive characteristics score across a certain time period: visualize
 
+    # tight layout
+    fig.tight_layout()
+
+    # save figure
+    fig.savefig(file_name+".jpg", dpi=300)
 
 def main():
+    # Description: main user interface
+    # Parameters: None
+    # Returns: None
+
+    # read the file, created df, and wrangle df
     file_name="hits_dataset.csv"
     headers=get_header(file_name)
     df=data_wrangling(file_name)
+
+    # create copy of original df
     current_df=df.copy()
+
     # set plot style
     plt.style.use("ggplot")
 
     choice = ""
+
+    # use while loop to allow user to execute multiple demands
     while choice != "H":
+
+        # display choice
         display_choice()
+
+        # get choice
         choice = input("Enter your choice (A-G, H to exit): ").strip().upper()
+
+        # Choice A: Sort Data
         if choice == "A":
+
+            # display column choice
             print("Choose one column to sort:")
             pretty_print_list(headers)
+
+            # get valid column number input
             column_num_raw = input("Select the column number to sort by: ")
             while column_num_raw.isdigit() == False or int(column_num_raw) not in range(len(headers)+1):
                 column_num_raw = input("Please enter a valid input: ")
             column_num=int(column_num_raw)-1
+
+            # get valid sort number input
             sort_order = input("Enter 0 for ascending or 1 for descending: ")
             while sort_order.isdigit() == False or int(sort_order) not in range(2):
                 sort_order = input("Please enter a valid input: ")
             sort_order=int(sort_order)
+
+            # sort df
             current_df = object_sort(current_df, column_num, sort_order)
             print("Sorting complete.")
 
+        # Choice B: Search for values in a column
         elif choice == "B":
+
+            # display column choice
             print("Choose one column to search:")
             pretty_print_list(list(current_df.columns))
+
+            # get valid column number
             column_num_raw = input("Select the column number to sort by: ")
             while column_num_raw.isdigit() == False or int(column_num_raw) not in range(len(headers) + 1):
                 column_num_raw = input("Please enter a valid input:")
             column_num = int(column_num_raw) - 1
+
+            # get input value
             search_value = input("Enter the value to search for: ")
+
+            # for artist name column, search for inclusion of the input value
+            # in other column, apply object search and get filtered df
             if column_num == 3:
                 filtered_df=current_df[current_df["name_artists"].str.contains(search_value, case=False, na=False)].copy()
             else:
                 filtered_df = object_search(current_df, column_num, search_value)
             if not filtered_df.empty:
-                current_df = filtered_df  # update df view
+                current_df = filtered_df
                 print("Searching complete.")
 
+        # Choice C: Filter by release date
         elif choice == "C":
-            y = input("Enter year (or leave blank): ")
-            while y.isdigit() == False:
-                y=input("Please enter a valid input: ")
-            m = input("Enter month (or leave blank): ")
-            while m.isdigit() == False:
-                m=input("Please enter a valid input: ")
-            d = input("Enter day (or leave blank): ")
-            while d.isdigit() == False:
-                d=input("Please enter a valid input: ")
-            year_num = int(y) if y.strip() else None
-            month_num = int(m) if m.strip() else None
-            date_num = int(d) if d.strip() else None
-            current_df = time_search(current_df, year_num, month_num, date_num)
+
+            # use while loops to get valid year, month and day inputs
+            while True:
+                y = input("Enter year (or leave blank): ").strip()
+                if y == "":
+                    year_num = None
+                    break
+                elif y.isdigit():
+                    year_num = int(y)
+                    break
+                else:
+                    print("Please enter a valid input.")
+
+            while True:
+                m = input("Enter month (or leave blank): ").strip()
+                if m == "":
+                    month_num = None
+                    break
+                elif m.isdigit():
+                    month_num = int(m)
+                    break
+                else:
+                    print("Please enter a valid input.")
+
+            while True:
+                d = input("Enter day (or leave blank): ").strip()
+                if d == "":
+                    day_num = None
+                    break
+                elif d.isdigit():
+                    day_num = int(d)
+                    break
+                else:
+                    print("Please enter a valid input.")
+
+            # update current df
+            current_df = time_search(current_df, year_num, month_num, day_num)
             print("Searching complete.")
 
+        # Choice D: Filter by explicit content
         elif choice == "D":
+
+            # get and ensure valid input for filter_num
             filter_num = input("Enter 0 to filter for non-explicit, 1 to filter for explicit: ")
             while filter_num.isdigit()==False or int(filter_num) not in range(2):
                 filter_num=input("Please enter a valid input: ")
             filter_num=int(filter_num)
+
+            # update current df with filter applied
             current_df = filter_explicit(current_df, filter_num)
             print("Filtering complete.")
 
+        # Choice E: Visualize and predict artist hit songs and their corresponding selected column values
         elif choice == "E":
+
+            # get input for artist name
             artist_name_input = input("Enter artist name (e.g. Ariana Grande): ").strip()
+
+            # display column choice
+            print("Choose a column of values:")
+            pretty_print_list(headers)
+
+            # get and ensure valid input for column
+            column_num_raw = input("Select column number for value prediction: ")
+            while column_num_raw.isdigit()==False or int(column_num_raw) not in range(len(headers)+1):
+                column_num_raw=input("Please enter a valid input: ")
+            column_num=int(column_num_raw)-1
+
+            # get and ensure valid input for prediction datapoints
             future_hits_num = input("Enter the number of future hits to predict: ")
             while future_hits_num.isdigit() == False:
                 future_hits_num=input("Please enter a valid input: ")
             future_hits_num=int(future_hits_num)
-            df_artist = current_df[current_df["name_artists"].str.contains(artist_name_input, case=False, na=False)].copy()
-            if df_artist.empty:
-                print("No songs found for this artist.")
-            else:
-                artist_popularity_prediction(df_artist, artist_name_input, future_hits_num)
 
+            # for artist name column, search for inclusion of the input value
+            df_artist = df[df["name_artists"].str.contains(artist_name_input, case=False, na=False)].copy()
+
+            # visualize and value prediction
+            artist_value_prediction(df_artist, artist_name_input, column_num, future_hits_num)
+
+        # Choice F: Save current dataframe to image
         elif choice == "F":
+
+            # get file name
             file_name = input("Enter file name to save current DataFrame as image: ")
+
+            # get valid input for max rows to display
             max_rows = input("Enter maximum rows to include in the image: ")
             while max_rows.isdigit() == False:
                 max_rows=input("Please enter a valid input: ")
             max_rows=int(max_rows)
+
+            # save dataframe as image
             save_df_as_image(current_df.drop(columns=["song_id", "id_artists"]), file_name, max_rows)
             print("Current DataFrame view saved.")
 
@@ -320,11 +437,12 @@ def main():
             current_df=df.copy()
 
         elif choice == "H":
+            # display message and exit
             print("\nProgram exited.")
 
         else:
+            # display message reset choice
             print("\nPlease select a valid choice (A - H).")
 
+# call main
 main()
-
-
