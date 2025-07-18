@@ -101,7 +101,7 @@ def object_search(df,column_num,object_name):
     col_name = df.columns[column_num]
 
     # apply filter
-    df_filtered = df[df[col_name]] == object_name
+    df_filtered = df[df[col_name] == object_name]
 
     # return original df when df is empty
     if df_filtered.empty:
@@ -236,10 +236,25 @@ def save_df_as_image(df, file_name, max_rows):
     # limit rows included in the plot
     df_to_plot = df.head(max_rows)
 
+    # calculate figure size dynamically
+    n_rows, n_cols = df_to_plot.shape
+    cell_height = 0.5
+    cell_width = 2.5  
+    fig_height = max(1, cell_height * (n_rows + 1))  
+    fig_width = max(6, cell_width * n_cols)
+
+    # dynamic font size to fit in the graph
+    if n_rows > 30 or n_cols > 8:
+        font_size = 8
+    elif n_rows > 15 or n_cols > 6:
+        font_size = 9
+    else:
+        font_size = 10
+
     # create figure
-    fig, ax = plt.subplots(figsize=(20, 0.5 * len(df_to_plot)))  # height scales with rows
-    ax.axis('tight')
-    ax.axis('off')
+    fig, ax = plt.subplots(figsize=(fig_width,fig_height)) 
+    ax.axis("tight")
+    ax.axis("off")
 
     # create, customize and save figure
     table = ax.table(cellText=df_to_plot.values,
@@ -249,7 +264,7 @@ def save_df_as_image(df, file_name, max_rows):
                      colLoc='center')
 
     table.auto_set_font_size(False)
-    table.set_fontsize(10)
+    table.set_fontsize(font_size)
     table.scale(1.2, 1.2)
 
     # tight layout
