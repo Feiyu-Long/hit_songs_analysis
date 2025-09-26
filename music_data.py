@@ -201,17 +201,14 @@ def artist_value_prediction(df,artist_name,column_num, future_hits_num):
     y_dense_pred = model.predict(X_dense)
 
     # Plot
-    plt.figure(figsize=(10, 6))
-    plt.scatter(df_artist['release_date'], y, color='blue', label='Historical')
-    plt.plot(dense_dates,y_dense_pred, color='purple', linestyle='-.', alpha=0.6, label='Fitted + Future Curve')
-    plt.scatter(future_dates, y_pred, color='red',label='Future Predictions')
-    plt.xlabel("Release Date")
-    plt.ylabel("Popularity")
-    plt.title(str(target_col)+" prediction for "+artist_name+" (Poly Regression)")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("predicted_"+str(target_col)+"_for_"+artist_name+".jpg", dpi=300)
-    plt.close()
+    fig,ax=plt.subplots(1,1,figsize=(10,6))
+    ax.scatter(df_artist['release_date'], y, color='blue', label='Historical')
+    ax.plot(dense_dates,y_dense_pred, color='purple', linestyle='-.', alpha=0.6, label='Fitted + Future Curve')
+    ax.scatter(future_dates, y_pred, color='red',label='Future Predictions')
+    ax.set(xlabel="Release Date",ylabel=str(target_col),title=str(target_col)+" prediction for "+artist_name+" (Poly Regression)")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig("predicted_"+str(target_col)+"_for_"+artist_name+".jpg", dpi=300)
 
     # wrap predicted dates and values into new df and display info
     df_future = pd.DataFrame({
@@ -461,3 +458,4 @@ def main():
 
 # call main
 main()
+
